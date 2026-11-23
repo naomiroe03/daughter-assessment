@@ -73,6 +73,14 @@ input:focus{border-color:var(--pink);outline:none}
 .cta{background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);border-radius:12px;padding:26px;display:grid;gap:14px;text-align:center;justify-items:center}
 .cta h3{font-size:clamp(28px,5vw,38px);color:var(--pink)}
 .note{font-size:12px;color:var(--cream-dim)}
+.adminbar{margin-top:14px;background:var(--panel-2);border:1px solid var(--gold);border-radius:12px;padding:14px 16px;display:grid;gap:10px}
+.adminbar .t{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--gold)}
+.adminbar .row{gap:8px}
+.mini{appearance:none;border:1px solid var(--line);background:var(--ink);color:var(--cream);border-radius:999px;padding:7px 12px;font:600 12px/1.2 var(--body);cursor:pointer}
+.mini:hover{border-color:var(--pink)}
+.mini.on{border-color:var(--pink);color:var(--pink)}
+.adminbar select{background:var(--ink);color:var(--cream);border:1px solid var(--line);border-radius:999px;padding:6px 10px;font:600 12px var(--body)}
+.small{font-size:12px;color:var(--cream-dim)}
 footer{text-align:center;font-size:12px;color:var(--cream-dim);padding-top:36px;letter-spacing:.08em}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -82,12 +90,15 @@ footer{text-align:center;font-size:12px;color:var(--cream-dim);padding-top:36px;
 <div class="wrap">
   <nav class="steps" id="steps" aria-label="Quiz progress"></nav>
   <div class="bar" id="bar" aria-hidden="true"><i id="fill"></i></div>
+  <div id="admin"></div>
   <main id="app"></main>
   <footer>KINGDOM ROE · COACHING &amp; CONSULTING</footer>
 </div>
 
 <script>
 const CHALLENGE_URL = "";   // Flodesk link for The 8-Day Purposeful Content Shift
+const NAOMI_EMAIL = "naomi@kingdomroe.com";
+const SHORT = {CG:"Church Girl", M:"Mystic Daughter", C:"Called Daughter"};
 const NAMES = {CG:"The Church Girl", M:"The Mystic Daughter", C:"The Called Daughter"};
 
 const Q = [
@@ -115,7 +126,7 @@ const R = {
   offer:[["Coaching niche","Faith-Based Entrepreneurship"],["Digital product","Faith-Based Webinars"],["Physical product","Journals and Notebooks"],["Online service","Leadership Coach"],["In-person service","Public Speaking Coach or Teacher"]]}
 };
 
-const S = {view:"cover", email:"", q:0, answers:Array(Q.length).fill(null), result:null};
+const S = {view:"cover", email:"", q:0, answers:Array(Q.length).fill(null), result:null, admin:false, owner:false};
 const ORDER = ["cover","welcome","quiz","results"];
 const STEPS = ["Welcome","Quiz","Results"];
 const $ = s => document.querySelector(s);
@@ -125,11 +136,13 @@ const CHECK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.2 11.6 2.
 
 function score(){
   const t={CG:0,M:0,C:0};
-  S.answers.forEach((a,i)=>{ t[Q[i][2][a]]++; });
+  S.answers.forEach((a,i)=>{ if(a!==null) t[Q[i][2][a]]++; });
   const max=Math.max(t.CG,t.M,t.C), tied=Object.keys(t).filter(k=>t[k]===max);
   if(tied.length===1) return tied[0];
   const q7=Q[6][2][S.answers[6]];
-  return tied.includes(q7) ? q7 : Q[0][2][S.answers[0]];
+  if(tied.includes(q7)) return q7;
+  const q1=S.answers[0]===null?null:Q[0][2][S.answers[0]];
+  return tied.includes(q1) ? q1 : tied[0];
 }
 
 function setSteps(){
@@ -140,6 +153,32 @@ function setSteps(){
   $("#steps").hidden=$("#bar").hidden=S.view==="cover";
 }
 function go(v){S.view=v;render();window.scrollTo({top:0});}
+function enterAdmin(){ S.admin=true; if(!S.email) S.email=NAOMI_EMAIL; go(S.view==="cover"?"welcome":S.view); }
+function renderAdmin(){
+  const box=document.getElementById("admin");
+  if(!S.admin){
+    box.innerHTML = S.owner && S.view==="cover" ? `<div class="adminbar"><p class="t">You own this quiz</p><div class="row"><button class="mini" id="adOpen">Open Review Mode</button></div></div>` : "";
+    const b=document.getElementById("adOpen"); if(b) b.onclick=enterAdmin; return;
+  }
+  const v=S.view;
+  box.innerHTML=`<div class="adminbar">
+    <p class="t">Review Mode · Only you see this · Every page is unlocked</p>
+    <div class="row">
+      <button class="mini ${v==="cover"?"on":""}" data-go="cover">Cover</button>
+      <button class="mini ${v==="welcome"?"on":""}" data-go="welcome">Welcome</button>
+      <button class="mini ${v==="quiz"?"on":""}" data-go="quiz">Questions</button>
+      <select id="adQ" aria-label="Jump to question">${Q.map((q,i)=>`<option value="${i}" ${v==="quiz"&&S.q===i?"selected":""}>Question ${i+1}</option>`).join("")}</select>
+    </div>
+    <div class="row"><span class="small">Preview results:</span>
+      ${["CG","M","C"].map(k=>`<button class="mini ${v==="results"&&S.result===k?"on":""}" data-res="${k}">${SHORT[k]}</button>`).join("")}
+      <button class="mini" id="adExit">Exit Review Mode</button>
+    </div></div>`;
+  box.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
+  box.querySelectorAll("[data-res]").forEach(b=>b.onclick=()=>{S.result=b.dataset.res;go("results");});
+  document.getElementById("adQ").onchange=e=>{S.q=+e.target.value;go("quiz");};
+  document.getElementById("adExit").onclick=()=>{S.admin=false;go("cover");};
+}
+(async()=>{ try{ const u = window.claude && claude.use ? await claude.use("user") : null; if(u && await u.isOwner()){ S.owner=true; renderAdmin(); } }catch(e){} })();
 
 function vCover(){return `<section class="cover">
   <img src="cover.jpg" alt="Which Daughter Are You? Mini Quiz. Discover your spiritual identity, who you're called to serve, and what you offer.">
@@ -176,7 +215,7 @@ function vQuiz(){const i=S.q,[t,o]=Q[i],sel=S.answers[i];return `<section class=
   <p class="qnum">Question ${i+1} of ${Q.length}</p>
   <h2 class="qtext">${esc(t)}</h2>
   <div style="display:grid;gap:10px">${o.map((x,k)=>`<button class="choice" data-a="${k}" aria-pressed="${sel===k}"><span class="k">${"ABC"[k]}</span><span>${esc(x)}</span></button>`).join("")}</div>
-  <div class="row between"><button class="btn ghost" id="back">${i===0?"Back":"Back"}</button><button class="btn" id="next" ${sel===null?"disabled":""}>${i===Q.length-1?"See My Results":"Next"}</button></div></section>`;}
+  <div class="row between"><button class="btn ghost" id="back">${i===0?"Back":"Back"}</button><button class="btn" id="next" ${sel===null&&!S.admin?"disabled":""}>${i===Q.length-1?"See My Results":"Next"}</button></div></section>`;}
 
 function vResults(){const d=R[S.result];return `<section class="page">
   <div class="copy">
@@ -199,15 +238,17 @@ function vResults(){const d=R[S.result];return `<section class="page">
 
 function render(){
   setSteps();
+  renderAdmin();
   const app=$("#app");
   app.innerHTML=({cover:vCover,welcome:vWelcome,quiz:vQuiz,results:vResults})[S.view]();
   if(S.view==="cover") $("#f").onsubmit=e=>{e.preventDefault();S.email=$("#em").value.trim();
+    if(S.email.toLowerCase()===NAOMI_EMAIL){enterAdmin();return;}
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(S.email)){$("#err").textContent="Please enter a valid email address.";return;} go("welcome");};
   if(S.view==="welcome") $("#start").onclick=()=>{S.q=0;go("quiz");};
   if(S.view==="quiz"){
     app.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>{S.answers[S.q]=+b.dataset.a;app.querySelectorAll("[data-a]").forEach(x=>x.setAttribute("aria-pressed",x===b));$("#next").disabled=false;setSteps();});
     $("#back").onclick=()=>{if(S.q===0)go("welcome");else{S.q--;render();}};
-    $("#next").onclick=()=>{if(S.answers[S.q]===null)return;if(S.q<Q.length-1){S.q++;render();}else{S.result=score();go("results");}};
+    $("#next").onclick=()=>{if(S.answers[S.q]===null&&!S.admin)return;if(S.q<Q.length-1){S.q++;render();}else{S.result=score();go("results");}};
   }
 }
 render();
